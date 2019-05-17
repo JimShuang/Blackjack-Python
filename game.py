@@ -1,21 +1,25 @@
 import random
+import poker
 
 class person(object):
     def __init__(self):
         self.hand = []
         self.bust = False
 
-#This method add a card to hand
     def deal(self, card):
         self.hand.append(card)
 
-#This method allows people to quit, not adding card anymore
     def end(self):
         pass
 
-#This method show people card on his hand
     def showhand(self):
-        return self.hand
+        show = []
+        for c in self.hand:
+            if c.is_faceup():
+                show.append(c.get_info())
+            else:
+                show.append("*")
+        return show
 
     def gobust(self):
         self.bust = True
@@ -32,7 +36,7 @@ class person(object):
 #This method return people's total score in hand; if ace exists, it will output 2 scores, one hard
 # score and one soft score
     def getscore(self):
-        cards = {
+        values = {
             'A': [1, 11],
             '2': 2,
             '3': 3,
@@ -49,12 +53,13 @@ class person(object):
         }
         hard, soft = 0, 0
         for c in self.hand:
-            if c == 'A':
-                hard += cards[c][0]
-                soft += cards[c][1]
+            v = c.get_info()[1]
+            if v == 'A':
+                hard += values[v][0]
+                soft += values[v][1]
             else:
-                hard += cards[c]
-                soft += cards[c]
+                hard += values[v]
+                soft += values[v]
         return hard, soft
 
 class player(person):
@@ -91,75 +96,71 @@ class player(person):
         print("*****You are bust!!*****")
         self.bust = True
 
-#In this method, dealer will decide how to deal his own card, Specifically, if a dealer get a
-#score < 17, no matter hard or soft, dealer will deal one card; else, dealer will quit his round.
-def dealer_play(dealer, cards):
+def dealer_play(dealer, cards, player_score):
+    target = max(player_score, 17)
+    while dealer.getscore()[1] <= target:
+        dealer.deal(cards.get_card())
 
-    if max(dealer.getscore()) == 21:
-        print("*****Dealer gets a Blakcjack!!*****")
+    if dealer.getscore()[1] > 21:
+        while dealer.getscore()[0] < target:
+            dealer.deal(cards.get_card())
 
-    while max(dealer.getscore()) < 17:
-        dealer.deal(cards.pop())
-
-    while max(dealer.getscore()) > 21 and min(dealer.getscore()) < 17:
-        dealer.deal(cards.pop())
-
-    if min(dealer.getscore()) > 21:
+    if dealer.getscore()[0] > 21:
         dealer.gobust()
-        print("*****Dealer is bust!!*****")
 
+    return
 
 def main():
 
-#Initialize a dealer and a player
+    #Initialize a dealer and a player
     print("Let's play Blackjack!" )
     dealer = person()
     balance = int(input("How much do you want to buy in? "))
     player1 = player(balance)
 
 
-#Shuffle 4 decks 3 times
-    deck = ['A','1','2','3','4','5','6','7','8','9','10','J','Q','K'] * 16
-    random.shuffle(deck)
-    random.shuffle(deck)
-    random.shuffle(deck)
+    #Shuffle 4 decks 3 times
+    decks = poker.deck(4)
+    decks.shuffle_deck(3)
 
     print("Ready to play!")
-    totalbet = 0
 
     play_again = True
+
     while play_again:
-#Now player1 places the initial bet and any amount is allowed.
+        totalbet = 0
         bet = player1.make_bet()
         totalbet += bet
 
-#Both dealer and player get 2 cards. Player show his cards face up while dealer has 1 of his cards face up
-#and the other one face down
-        player1.deal(deck.pop())
-        dealer.deal(deck.pop())
-        player1.deal(deck.pop())
-        dealer.deal(deck.pop())
+        #Both dealer and player get 2 cards. Player show his cards face up while dealer has 1 of his cards face up
+        #and the other one face down
+        player1.deal(decks.get_card())
+        flip_card = decks.get_card()
+        flip_card.flip()
+        dealer.deal(flip_card)
+        player1.deal(decks.get_card())
+        dealer.deal(decks.get_card())
 
-        print("Now dealer has * and ", end = '')
-        print(dealer.showhand()[0])
+        print("Now dealer has ", end = '')
+        print(dealer.showhand())
         print("Now you have ", end = '')
         print(player1.showhand())
-        if player1.is_blackjack():
-            player1.win_blackjack(bet)
-            balance = player1.show_money()
-            quit()
 
-        print("Now it is your turn.")
-
-#Player plays first. He can choose either Hit or Stay. If choose to stay, he will be dealt 1 card
-#and his current hand and score will be shown, whether Blackjack or bust will be shown as well;
-#if choose to stay, he will finish his round.
+        #Player plays first. He can choose either Hit or Stay. If choose to stay, he will be dealt 1 card
+        #and his current hand and score will be shown, whether Blackjack or bust will be shown as well;
+        #if choose to stay, he will finish his round.
         while True:
+
+            if player1.is_blackjack():
+                player1.win_blackjack(bet)
+                balance = player1.show_money()
+                break
+
             play = input("Do you want to [H]it or [S]tand? H/S: ").lower()
             if play == 'h':
                 bet = player1.make_bet()
                 totalbet += bet
-                player1.deal(deck.pop())
+                player1.deal(decks.get_card())
                 print('You now have ', end = '')
                 print(player1.showhand())
                 print('Your score is ', end = '')
@@ -182,36 +183,37 @@ def main():
                 player1.end()
                 break
 
-        print("Now it is dealer's turn.")
-        dealer_play(dealer, deck)
-
-#Show both dealer and player hands
-        print("Dealer's hand is ", end = '')
-        print(dealer.hand)
-        print("Player's hand is ", end = '')
-        print(player1.hand)
-
         if player1.isbust():
-            if dealer.isbust():
-                player1.break_even(totalbet)
-                print("/////Both bust!!!/////")
-            else:
-                print("/////You lose!!!/////")
+            print("/////You are bust, so you lose!!!/////")
+            break
         else:
+
+            player_score = player1.getscore()[0] if player1.getscore()[1] > 21 else player1.getscore()[1]
+            print("You have " + str(player_score))
+            print("Now it is dealer's turn.")
+            flip_card.flip()
+            dealer_play(dealer, decks, player_score)
+
+            #Show both dealer and player hands
+            print("Dealer's hand is ", end = '')
+            print(dealer.showhand())
+            print("Player's hand is ", end = '')
+            print(player1.showhand())
+
             if dealer.isbust():
                 player1.win_bet(totalbet)
-                print("/////You win!!!/////")
+                print("/////Dealer is bust but you are not, so you win!!!/////")
             else:
-                player_score = player1.getscore()[0] if player1.getscore()[1] > 21 else player1.getscore()[1]
                 dealer_score = dealer.getscore()[0] if dealer.getscore()[1] > 21 else dealer.getscore()[1]
+                print("Dealer has " + str(dealer_score))
                 if player_score == dealer_score:
                     player1.break_even(totalbet)
-                    print("/////Tie!!!/////")
+                    print("/////You and dealer have the same points, so you are even!!!/////")
                 elif player_score > dealer_score:
                     player1.win_bet(totalbet)
-                    print("/////You win!!!/////")
+                    print("/////You have more points, so you win!!!/////")
                 else:
-                    print("/////Dealer win!!!/////")
+                    print("/////Dealer has more points so dealer win!!!/////")
 
         player1.clear()
         dealer.clear()
@@ -226,9 +228,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
